@@ -6,37 +6,41 @@ const supabase = createClient(
 );
 
 export default async function handler(req, res) {
-  // Sallitaan kaikki alkuperät (tärkeää iframe-ympäristössä)
+  // 1. CORS-OTSIKOT (Nämä sallivat AI Studion lukea dataa)
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  
-  // LISÄTTY: Sallitaan Authorization-otsikko, jotta haku ei tyssää siihen
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-client-info, apikey');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
+  // 2. PREFLIGHT-PYYNTÖ (Selain tarkistaa luvat tällä)
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
-  if (req.method === 'GET') {
-    const { data, error } = await supabase
-      .from('reservations')
-      .select('*');
+  try {
+    // 3. GET - HAETAAN VARAUKSET
+    if (req.method === 'GET') {
+      const { data, error } = await supabase
+        .from('reservations')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-    if (error) return res.status(500).json(error);
+      if (error) throw error;
+      return res.status(200).json(data);
+    }
 
-    return res.status(200).json(data);
-  }
+    // 4. POST - TEHDÄÄN VARAUS
+    if (req.method === 'POST') {
+      const { name, phone, email, time, guests } = req.body;
+      const { data, error } = await supabase
+        .from('reservations')
+        .insert([{ name, phone, email, time, guests }]);
 
-  if (req.method === 'POST') {
-    const { name, phone, email, time, guests } = req.body;
-
-    const { data, error } = await supabase
-      .from('reservations')
-      .insert([{ name, phone, email, time, guests }]);
-
-    if (error) return res.status(500).json(error);
-
-    return res.status(200).json(data);
+      if (error) throw error;
+      return res.status(200).json(data);
+    }
+  } catch (error) {
+    console.error("Palvelinvirhe:", error);
+    return res.status(500).json({ error: error.message });
   }
 
   return res.status(405).json({ message: 'Method not allowed' });
